@@ -1,0 +1,158 @@
+---
+title: "FNCE40003 Major Assignment"
+author: "Haixuan Chen and Hanqing Tian"
+date: "Due on 26 May 2022"
+output: pdf_document
+fontsize: 12pt
+---
+
+```{r, include=F}
+knitr::opts_chunk$set(attr.source=".numberLines")
+```
+
+<!-- 
+Please manually run the following chunk to install all the required packages.
+-->
+```{r, include=F, eval=F}
+install.packages("forecast")
+install.packages("MCS")
+```
+
+Load Data
+```{r}
+data <- read.csv("R_inputs.csv") # 2018 to 2020
+names(data)
+
+m <- ncol(data) - 2 # number of models
+n <- ncol(data) # actual volatility column
+```
+
+MAE & MSE & QLIKE
+```{r Function}
+Forecast_Error <- function(data){
+  # error = actual - forecast
+  error <- matrix(, ncol = m)
+  for (i in 1:m) {
+    error[i] <- data[n] - data[i+1]
+  }
+  
+  # MAE
+  abs_error <- matrix(, ncol = m)
+  for (i in 1:m) {
+    abs_error[i] <- abs(data[n] - data[i+1])
+  }
+  
+  MAE <- matrix(, nrow = m, ncol = 1)
+  for (i in 1:m) {
+    MAE[i,] <- sum(unlist(abs_error[i]))/nrow(data)
+  }
+  
+  # MSE
+  sq_error <- matrix(, ncol = m)
+  for (i in 1:m) {
+    sq_error[i] <- (data[n] - data[i+1])^2
+  }
+  
+  MSE <- matrix(, nrow = m, ncol = 1)
+  for (i in 1:m) {
+    MSE[i,] <- sum(unlist(sq_error[i]))/nrow(data)
+  }
+  
+  # QLIKE
+  qlike_error <- matrix(, ncol = m)
+  for (i in 1:m) {
+    qlike_error[i] <- log(data[i+1]) + (data[n]/data[i+1])
+  }
+  
+  QLIKE <- matrix(, nrow = m, ncol = 1)
+  for (i in 1:m) {
+    QLIKE[i,] <- sum(unlist(qlike_error[i]))/nrow(data)
+  }
+  
+  # Output Results
+  table <- data.frame("Models" = c("HAR (model 1)", "HAR-ALL (model 2)", 
+                                   "HAR-RSV (model 3)", "HAR-RSV-ALL (model 4)", 
+                                   "ARMA(1,1) (model 5)", 
+                                   "PN-GARCH(1,1)-M (model 6)", 
+                                   "PN-GARCH(1,1)-M-ALL (model 7)", 
+                                   "GARCH(1,1) (model 8)"), 
+           "MAE" = signif(MAE, digits = 5), 
+           "MSE" = signif(MSE, digits = 5), 
+           "QLIKE" = signif(QLIKE, digits = 5))
+  
+  return(list(abs_error = abs_error, sq_error = sq_error, 
+              qlike_error = qlike_error, table = table))
+  
+}
+```
+```{r 2018 to 2020}
+print("Forecasting Period: 1 Jan 2018 to 31 Dec 2020")
+Forecast_Error(data)$table
+```
+```{r 2018 to 2019}
+data_2018_19 <- data[1:503,] # 2018 to 2019
+
+print("Forecasting Period: 1 Jan 2018 to 31 Dec 2019")
+Forecast_Error(data_2018_19)$table
+```
+```{r 2020 only}
+data_2020 <- data[504:nrow(data),] # 2020 only
+
+print("Forecasting Period: 1 Jan 2020 to 31 Dec 2020")
+Forecast_Error(data_2020)$table
+```
+
+Model Confidence Set
+```{r Function}
+# install.packages("MCS")
+library(MCS)
+
+# Null hypothesis: Equal Predictive Ability (EPA)
+# Confidence level = 5%
+
+MCS <- function(data){
+  
+  # MSE
+  sq_error <- matrix(unlist(Forecast_Error(data)$sq_error), ncol = m)
+  
+  writeLines("\n Loss function: MSE \n Test statistic: Tmax")
+  MCSprocedure(sq_error, alpha = 0.15, B = 5000, cl = NULL, 
+             ram.allocation = TRUE, statistic = "Tmax", k = NULL, min.k = 3, 
+             verbose = TRUE)
+  
+  writeLines("\n Loss function: MSE \n Test statistic: TR")
+  MCSprocedure(sq_error, alpha = 0.15, B = 5000, cl = NULL, 
+             ram.allocation = TRUE, statistic = "TR", k = NULL, min.k = 3, 
+             verbose = TRUE)
+  
+  # QLIKE
+  qlike_error <- matrix(unlist(Forecast_Error(data)$qlike_error), ncol = m)
+  
+  writeLines("\n Loss function: QLIKE \n Test statistic: Tmax")
+  MCSprocedure(qlike_error, alpha = 0.15, B = 5000, cl = NULL, 
+             ram.allocation = TRUE, statistic = "Tmax", k = NULL, min.k = 3, 
+             verbose = TRUE)
+  
+  writeLines("\n Loss function: QLIKE \n Test statistic: TR")
+  MCSprocedure(qlike_error, alpha = 0.15, B = 5000, cl = NULL, 
+             ram.allocation = TRUE, statistic = "TR", k = NULL, min.k = 3, 
+             verbose = TRUE)
+}
+```
+```{r 2018 to 2020}
+print("Forecasting Period: 1 Jan 2018 to 31 Dec 2020")
+MCS(data)
+```
+```{r 2018 to 2019}
+print("Forecasting Period: 1 Jan 2018 to 31 Dec 2019")
+MCS(data_2018_19)
+```
+```{r 2020 only}
+print("Forecasting Period: 1 Jan 2020 to 31 Dec 2020")
+MCS(data_2020)
+```
+
+
+
+
+
